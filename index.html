@@ -28,6 +28,7 @@
     <button id="clear" class="btn">ลบทั้งหมด</button>
     
     <button id="penToggle" class="btn">ปากกา: เปิด</button>
+    <button id="downloadJpg" class="btn">ดาวน์โหลด JPG</button>
   </div>
 </header>
 
@@ -132,6 +133,50 @@
   penBtn.addEventListener('click',()=>{ penEnabled = !penEnabled; penBtn.textContent = penEnabled ? 'ปากกา: เปิด' : 'ปากกา: ปิด'; canvas.style.cursor = penEnabled ? 'crosshair' : 'default'; });
   canvas.style.cursor = 'crosshair';
 })();
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" integrity="sha512-BNa5zs6fQ2Zf0wVx2I8o1r9H3z1RkS6n4k0fW3d3wqj1i0sQm8crkQ7X0pKJm2i4i0k+Qb6QOe+X4k3yZ3+4jw==" crossorigin="anonymous" referrerpolicy="no-referrer">
+  // Download as JPG (combined doc + signature)
+  (function(){
+    const btn = document.getElementById('downloadJpg');
+    if (!btn) return;
+    btn.addEventListener('click', async ()=>{
+      try {
+        const node = document.getElementById('frame');
+        const canvasOut = await html2canvas(node, {scale: 2, backgroundColor: null});
+        const jpg = canvasOut.toDataURL('image/jpeg', 0.95);
+        const a = document.createElement('a');
+        a.href = jpg;
+        a.download = 'signed.jpg';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        // Fallback for some mobile browsers: also open in a new tab
+        setTimeout(()=>{ try { window.open(jpg, '_blank'); } catch(e){} }, 300);
+      } catch (err) {
+        console.error(err);
+        alert('ดาวน์โหลด JPG ไม่สำเร็จ');
+      }
+    });
+  })();
+
+</script>
+<script>
+  // Long-press (contextmenu) to open JPG in a new tab (for mobile save/share)
+  document.getElementById('frame').addEventListener('contextmenu', async (e)=>{
+    e.preventDefault();
+    try{
+      const node = document.getElementById('frame');
+      const canvasOut = await html2canvas(node, {scale: 2, backgroundColor: null});
+      const jpg = canvasOut.toDataURL('image/jpeg', 0.95);
+      const win = window.open('', '_blank');
+      if (win) {
+        win.document.open();
+        win.document.write('<!doctype html><meta charset="utf-8"><title>signed.jpg</title><img src="'+jpg+'" style="width:100%;height:auto;display:block">');
+        win.document.close();
+      }
+    }catch(err){ console.error(err); }
+  });
+
 </script>
 </body>
 </html>
