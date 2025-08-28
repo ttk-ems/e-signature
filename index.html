@@ -15,8 +15,8 @@
   .frame{position:relative;background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.04)}
   #doc{display:block;width:100%;height:auto;vertical-align:top;user-select:none;-webkit-user-drag:none}
   /* no touch-action on canvas -> allow page pinch-zoom; we preventDefault only for single-touch while drawing */
-  #sig_full{position:absolute;top:0;bottom:0;left:24px;right:24px;width:auto;height:auto;background:transparent;border:0;border-radius:0;}
-  #sig_full.hidden-border{}
+  #sig_full{position:absolute;left:0;top:0;width:100%;height:100%;background:transparent;}
+  #sig_full.hidden-border{border-color:transparent}
   .btn{padding:8px 12px;border:1px solid var(--line);border-radius:12px;background:#fff;cursor:pointer}
 </style>
 </head>
