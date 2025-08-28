@@ -2,8 +2,8 @@
 <html lang="th">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>เซ็นเต็มหน้าเอกสาร (ฉบับใบยินยอม 2)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes"/>
+<title>เซ็นเต็มหน้า (รองรับ pinch-to-zoom)</title>
 <style>
   :root{--fg:#0f172a;--muted:#475569;--line:#CBD5E1;--accent:#0ea5e9;--bg:#f8fafc}
   *{box-sizing:border-box}
@@ -13,7 +13,7 @@
   header b{font-size:15px}
   .wrap{max-width:1000px;margin:0 auto;padding:12px}
   .frame{position:relative;background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.04)}
-  #doc{display:block;width:100%;height:auto;vertical-align:top;user-select:none;-webkit-user-drag:none}
+  #doc{display:block;width:100%;height:auto;vertical-align:top;user-select:none;-webkit-user-drag:none;touch-action:manipulation}
   #sig_full{position:absolute;left:0;top:0;width:100%;height:100%;border:3px dashed rgba(14,165,233,.9);border-radius:0;background:transparent;touch-action:none}
   #sig_full.hidden-border{border-color:transparent}
   .btn{padding:8px 12px;border:1px solid var(--line);border-radius:12px;background:#fff;cursor:pointer}
@@ -23,11 +23,12 @@
 <body>
 <header>
   <div class="row">
-    <b>เซ็นได้ทุกที่บนหน้าเอกสาร (ฉบับใหม่)</b>
+    <b>เซ็นเต็มหน้า — รองรับ pinch-to-zoom บนมือถือ</b>
     <button id="undo" class="btn">ย้อนเส้นล่าสุด</button>
     <button id="clear" class="btn">ลบทั้งหมด</button>
     <button id="toggle" class="btn">ซ่อน/แสดงกรอบ</button>
-    <button id="center" class="btn">เลื่อนภาพให้อยู่กึ่งกลาง</button>
+    <button id="center" class="btn">จัดกึ่งกลาง</button>
+    <button id="saveImg" class="btn">บันทึกรูปภาพ</button>
   </div>
 </header>
 
@@ -37,27 +38,32 @@
     <canvas id="sig_full"></canvas>
   </div>
   <div class="muted" style="margin-top:8px">
-    แนะนำ: ซ่อนกรอบก่อนแคปจอเพื่อให้ภาพเนียน
+    วิธีใช้: ถ่างนิ้วเพื่อซูมเข้า, หุบนิ้วเพื่อซูมออกได้ตามปกติ — แนะนำซ่อนกรอบก่อนบันทึก/แคปจอ
   </div>
 </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" integrity="sha512-BNa5zs6fQ2Zf0wVx2I8o1r9H3z1RkS6n4k0fW3d3wqj1i0sQm8crkQ7X0pKJm2i4i0k+Qb6QOe+X4k3yZ3+4jw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
 <script>
 (function(){
   const img = document.getElementById('doc');
   const canvas = document.getElementById('sig_full');
   const ctx = canvas.getContext('2d');
+  const frame = document.getElementById('frame');
   const DPR = window.devicePixelRatio || 1;
+
   let drawing=false, last=null;
   const strokes=[]; let path=null;
 
-  function resize(){
-    const r = canvas.getBoundingClientRect();
-    canvas.width = Math.max(1, Math.floor(r.width * DPR));
-    canvas.height = Math.max(1, Math.floor(r.height * DPR));
+  function sizeToMatch(){
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.max(1, Math.floor(rect.width * DPR));
+    canvas.height = Math.max(1, Math.floor(rect.height * DPR));
     ctx.setTransform(DPR,0,0,DPR,0,0);
     ctx.lineWidth=2; ctx.lineCap='round'; ctx.strokeStyle='#0f172a';
     redraw();
   }
+
   function redraw(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
     ctx.lineWidth=2; ctx.lineCap='round'; ctx.strokeStyle='#0f172a';
@@ -65,27 +71,58 @@
       for(let i=1;i<p.length;i++){ const a=p[i-1], b=p[i]; ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); }
     }
   }
-  function pos(e){
-    if(e.touches && e.touches[0]){ const t=e.touches[0]; const rect=canvas.getBoundingClientRect(); return {x:t.clientX-rect.left,y:t.clientY-rect.top}; }
-    return {x:e.offsetX,y:e.offsetY};
+
+  function mapPointFromClient(clientX, clientY){
+    const rect = canvas.getBoundingClientRect();
+    // use CSS pixels coords; ctx is scaled to DPR
+    return {x: clientX - rect.left, y: clientY - rect.top};
   }
-  function down(e){ drawing=true; last=pos(e); path=[last]; e.preventDefault(); }
-  function move(e){ if(!drawing) return; const p=pos(e); ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke(); last=p; path.push(p); e.preventDefault(); }
-  function up(){ if(drawing && path && path.length>1) strokes.push(path); drawing=false; path=null; }
 
-  window.addEventListener('resize', resize);
-  img.addEventListener('load', resize);
-  if (img.complete) resize();
-  const ro = new ResizeObserver(resize);
-  ro.observe(document.getElementById('frame'));
+  // Mouse
+  function downMouse(e){ drawing=true; last = mapPointFromClient(e.clientX, e.clientY); path=[last]; e.preventDefault(); }
+  function moveMouse(e){ if(!drawing) return; const p=mapPointFromClient(e.clientX, e.clientY); ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke(); last=p; path.push(p); e.preventDefault(); }
+  function upMouse(){ if(drawing && path && path.length>1) strokes.push(path); drawing=false; path=null; }
 
-  canvas.addEventListener('mousedown',down); canvas.addEventListener('mousemove',move); window.addEventListener('mouseup',up);
-  canvas.addEventListener('touchstart',down,{passive:false}); canvas.addEventListener('touchmove',move,{passive:false}); canvas.addEventListener('touchend',up);
+  // Touch (allow pinch with 2 fingers)
+  function downTouch(e){
+    if(e.touches.length!==1){ drawing=false; return; } // allow pinch zoom
+    const t=e.touches[0]; drawing=true; last=mapPointFromClient(t.clientX,t.clientY); path=[last]; e.preventDefault();
+  }
+  function moveTouch(e){
+    if(!drawing || e.touches.length!==1) return; // ignore multi-touch to allow pinch zoom
+    const t=e.touches[0]; const p=mapPointFromClient(t.clientX,t.clientY);
+    ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke(); last=p; path.push(p); e.preventDefault();
+  }
+  function upTouch(){ if(drawing && path && path.length>1) strokes.push(path); drawing=false; path=null; }
 
+  // Wire events
+  window.addEventListener('resize', sizeToMatch);
+  img.addEventListener('load', sizeToMatch);
+  if (img.complete) sizeToMatch();
+
+  canvas.addEventListener('mousedown', downMouse);
+  canvas.addEventListener('mousemove', moveMouse);
+  window.addEventListener('mouseup', upMouse);
+
+  canvas.addEventListener('touchstart', downTouch, {passive:false});
+  canvas.addEventListener('touchmove', moveTouch, {passive:false});
+  canvas.addEventListener('touchend', upTouch);
+
+  // Toolbar
   document.getElementById('clear').addEventListener('click',()=>{ if(!confirm('ลบลายเซ็นทั้งหมด?')) return; strokes.length=0; redraw(); });
   document.getElementById('undo').addEventListener('click',()=>{ strokes.pop(); redraw(); });
   document.getElementById('toggle').addEventListener('click',()=>{ canvas.classList.toggle('hidden-border'); });
   document.getElementById('center').addEventListener('click',()=>{ img.scrollIntoView({behavior:'smooth',block:'center'}); });
+  document.getElementById('saveImg').addEventListener('click', async ()=>{
+    const wasHidden = canvas.classList.contains('hidden-border');
+    canvas.classList.add('hidden-border');
+    const out = await html2canvas(frame, {scale: 2, backgroundColor: null});
+    if(!wasHidden) canvas.classList.remove('hidden-border');
+    const a = document.createElement('a');
+    a.download = 'signed-consent.png';
+    a.href = out.toDataURL('image/png');
+    a.click();
+  });
 })();
 </script>
 </body>
