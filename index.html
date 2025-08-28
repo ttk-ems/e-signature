@@ -135,30 +135,46 @@
 })();
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" integrity="sha512-BNa5zs6fQ2Zf0wVx2I8o1r9H3z1RkS6n4k0fW3d3wqj1i0sQm8crkQ7X0pKJm2i4i0k+Qb6QOe+X4k3yZ3+4jw==" crossorigin="anonymous" referrerpolicy="no-referrer">
+  
   // Download as JPG (combined doc + signature)
   (function(){
     const btn = document.getElementById('downloadJpg');
     if (!btn) return;
-    btn.addEventListener('click', async ()=>{
+    btn.addEventListener('click', ()=>{
       try {
-        const node = document.getElementById('frame');
-        const canvasOut = await html2canvas(node, {scale: 2, backgroundColor: null});
-        const jpg = canvasOut.toDataURL('image/jpeg', 0.95);
+        const img = document.getElementById('doc');
+        const sig = document.getElementById('sig_full');
+        if (!img || !sig) return;
+        // Create an offscreen canvas matching the display size
+        const merged = document.createElement('canvas');
+        merged.width = img.naturalWidth || img.width;
+        merged.height = img.naturalHeight || img.height;
+        const ctx = merged.getContext('2d');
+        // draw background doc scaled to merged size
+        ctx.drawImage(img, 0, 0, merged.width, merged.height);
+        // draw signature scaled to same size
+        // compute scale factor from on-screen canvas to image intrinsic size
+        const scaleX = merged.width / sig.width;
+        const scaleY = merged.height / sig.height;
+        if (sig.width && sig.height) {
+          ctx.save();
+          ctx.scale(scaleX, scaleY);
+          ctx.drawImage(sig, 0, 0);
+          ctx.restore();
+        }
+        const dataUrl = merged.toDataURL('image/jpeg', 0.95);
         const a = document.createElement('a');
-        a.href = jpg;
-        a.download = 'signed.jpg';
+        a.href = dataUrl;
+        a.download = 'signed-document.jpg';
         document.body.appendChild(a);
         a.click();
-        document.body.removeChild(a);
-        // Fallback for some mobile browsers: also open in a new tab
-        setTimeout(()=>{ try { window.open(jpg, '_blank'); } catch(e){} }, 300);
+        a.remove();
       } catch (err) {
         console.error(err);
-        alert('ดาวน์โหลด JPG ไม่สำเร็จ');
+        alert('ไม่สามารถบันทึกรูปได้');
       }
     });
   })();
-
 </script>
 <script>
   // Long-press (contextmenu) to open JPG in a new tab (for mobile save/share)
@@ -178,5 +194,57 @@
   });
 
 </script>
+
+<!-- Added by ChatGPT: Merge background + signature and download as JPG -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const docImg = document.getElementById('doc');
+  const sigCanvas = document.getElementById('sig_full');
+  const downloadBtn = document.getElementById('downloadJpg');
+
+  function downloadMerged() {
+    try {
+      // Guard
+      if (!docImg || !sigCanvas) { alert('ไม่พบภาพเอกสารหรือ canvas ลายเซ็น'); return; }
+      // Create a work canvas at document image size
+      const merged = document.createElement('canvas');
+      // Use naturalWidth/Height when available for best quality
+      const w = docImg.naturalWidth || docImg.width;
+      const h = docImg.naturalHeight || docImg.height;
+      merged.width = w;
+      merged.height = h;
+      const ctx = merged.getContext('2d');
+
+      // Draw background document
+      ctx.drawImage(docImg, 0, 0, w, h);
+
+      // Draw signature strokes. If on-screen canvas is scaled, map coordinates using CSS scale.
+      // We render by scaling to the background size.
+      try {
+        ctx.drawImage(sigCanvas, 0, 0, w, h);
+      } catch (e) {
+        console.warn('drawImage signature failed:', e);
+      }
+
+      // Create link and download
+      const link = document.createElement('a');
+      link.download = 'signed-document.jpg';
+      link.href = merged.toDataURL('image/jpeg', 0.92);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      merged.width = merged.height = 0; // cleanup
+    } catch (err) {
+      console.error(err);
+      alert('เกิดข้อผิดพลาดระหว่างดาวน์โหลด');
+    }
+  }
+
+  if (downloadBtn) {
+    downloadBtn.addEventListener('click', downloadMerged, { passive: true });
+  }
+});
+</script>
+
 </body>
 </html>
