@@ -15,7 +15,7 @@
   .frame{position:relative;background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.04)}
   #doc{display:block;width:100%;height:auto;vertical-align:top;user-select:none;-webkit-user-drag:none}
   /* no touch-action on canvas -> allow page pinch-zoom; we preventDefault only for single-touch while drawing */
-  #sig_full{position:absolute;left:0;top:0;width:100%;height:100%;background:transparent;}
+  #sig_full{position:absolute;left:0;top:0;width:100%;height:100%;border:2px dashed rgba(14,165,233,.8);border-radius:8px;background:transparent}
   #sig_full.hidden-border{border-color:transparent}
   .btn{padding:8px 12px;border:1px solid var(--line);border-radius:12px;background:#fff;cursor:pointer}
 </style>
@@ -26,9 +26,8 @@
     <b>หนังสือให้ความยินยอมเกี่ยวกับข้อมูลส่วนบุคคล</b>
     <button id="undo" class="btn">ย้อนเส้นล่าสุด</button>
     <button id="clear" class="btn">ลบทั้งหมด</button>
-    
+    <button id="toggleBorder" class="btn">ซ่อน/แสดงกรอบ</button>
     <button id="penToggle" class="btn">ปากกา: เปิด</button>
-    <button id="fullscreen" class="btn">เต็มจอ</button>
   </div>
 </header>
 
@@ -129,24 +128,10 @@
   // Toolbar actions
   document.getElementById('undo').addEventListener('click',()=>{ strokes.pop(); redraw(); });
   document.getElementById('clear').addEventListener('click',()=>{ if(!confirm('ลบลายเส้นทั้งหมด?')) return; strokes.length=0; redraw(); });
-    const penBtn = document.getElementById('penToggle');
+  document.getElementById('toggleBorder').addEventListener('click',()=>{ canvas.classList.toggle('hidden-border'); });
+  const penBtn = document.getElementById('penToggle');
   penBtn.addEventListener('click',()=>{ penEnabled = !penEnabled; penBtn.textContent = penEnabled ? 'ปากกา: เปิด' : 'ปากกา: ปิด'; canvas.style.cursor = penEnabled ? 'crosshair' : 'default'; });
   canvas.style.cursor = 'crosshair';
-  // Fullscreen button
-  document.getElementById('fullscreen').addEventListener('click', ()=>{
-    const elem = document.getElementById('frame');
-    if (!document.fullscreenElement && elem.requestFullscreen) {
-      elem.requestFullscreen();
-    } else if (!document.fullscreenElement && elem.webkitRequestFullscreen) { // Safari
-      elem.webkitRequestFullscreen();
-    } else if (!document.fullscreenElement && elem.msRequestFullscreen) { // IE11
-      elem.msRequestFullscreen();
-    } else {
-      if (document.exitFullscreen) document.exitFullscreen();
-      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
-      else if (document.msExitFullscreen) document.msExitFullscreen();
-    }
-  });
 })();
 </script>
 </body>
