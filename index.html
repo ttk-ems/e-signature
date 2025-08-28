@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes"/>
-<title>เซ็นเต็มหน้า (Pinch-to-Zoom + Save)</title>
+<title>แบบฟอร์มเซ็นบนภาพ — ปากกาเปิด/ปิด (Pinch-to-zoom)</title>
 <style>
   :root{--fg:#0f172a;--muted:#475569;--line:#CBD5E1;--accent:#0ea5e9;--bg:#f8fafc}
   *{box-sizing:border-box}
@@ -13,20 +13,22 @@
   header b{font-size:15px}
   .wrap{max-width:1000px;margin:0 auto;padding:12px}
   .frame{position:relative;background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.04)}
-  #doc{display:block;width:100%;height:auto;vertical-align:top;user-select:none;-webkit-user-drag:none;touch-action:manipulation}
-  #sig_full{position:absolute;left:0;top:0;width:100%;height:100%;border:3px dashed rgba(14,165,233,.9);border-radius:0;background:transparent;touch-action:none}
-  #sig_full.hidden-border{border-color:transparent}
+  #doc{display:block;width:100%;height:auto;vertical-align:top;user-select:none;-webkit-user-drag:none}
+  /* no touch-action on canvas -> allow page pinch-zoom; we preventDefault only for single-touch while drawing */
+  #sig_full{position:absolute;top:0;bottom:0;left:24px;right:24px;width:auto;height:auto;background:transparent;border:0;border-radius:0;}
+  #sig_full.hidden-border{}
   .btn{padding:8px 12px;border:1px solid var(--line);border-radius:12px;background:#fff;cursor:pointer}
 </style>
 </head>
 <body>
 <header>
   <div class="row">
-    <b>เซ็นเต็มหน้า — Pinch-to-zoom + Save</b>
+    <b>หนังสือให้ความยินยอมเกี่ยวกับข้อมูลส่วนบุคคล</b>
     <button id="undo" class="btn">ย้อนเส้นล่าสุด</button>
     <button id="clear" class="btn">ลบทั้งหมด</button>
-    <button id="toggle" class="btn">ซ่อน/แสดงกรอบ</button>
-    <button id="saveImg" class="btn">บันทึก</button>
+    
+    <button id="penToggle" class="btn">ปากกา: เปิด</button>
+    <button id="fullscreen" class="btn">เต็มจอ</button>
   </div>
 </header>
 
@@ -37,8 +39,6 @@
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" integrity="sha512-BNa5zs6fQ2Zf0wVx2I8o1r9H3z1RkS6n4k0fW3d3wqj1i0sQm8crkQ7X0pKJm2i4i0k+Qb6QOe+X4k3yZ3+4jw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-
 <script>
 (function(){
   const img = document.getElementById('doc');
@@ -47,80 +47,105 @@
   const frame = document.getElementById('frame');
   const DPR = window.devicePixelRatio || 1;
 
-  let drawing=false, last=null;
-  const strokes=[]; let path=null;
+  // drawing state
+  let penEnabled = true;
+  let drawing = false;
+  let last = null;
+  const strokes = []; // array of paths (each path = array of points)
 
-  function sizeToMatch(){
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = Math.max(1, Math.floor(rect.width * DPR));
-    canvas.height = Math.max(1, Math.floor(rect.height * DPR));
+  // pen style
+  function setPenStyle(){
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#0f172a';
+  }
+
+  function resizeToMatch(){
+    const r = canvas.getBoundingClientRect();
+    canvas.width = Math.max(1, Math.floor(r.width * DPR));
+    canvas.height = Math.max(1, Math.floor(r.height * DPR));
     ctx.setTransform(DPR,0,0,DPR,0,0);
-    ctx.lineWidth=2; ctx.lineCap='round'; ctx.strokeStyle='#0f172a';
+    setPenStyle();
     redraw();
   }
 
   function redraw(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
-    ctx.lineWidth=2; ctx.lineCap='round'; ctx.strokeStyle='#0f172a';
-    for(const p of strokes){
-      for(let i=1;i<p.length;i++){ const a=p[i-1], b=p[i]; ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); }
+    setPenStyle();
+    for(const path of strokes){
+      for(let i=1;i<path.length;i++){ const a=path[i-1], b=path[i]; ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); }
     }
   }
 
-  function mapPointFromClient(clientX, clientY){
+  function pointFromClient(clientX, clientY){
     const rect = canvas.getBoundingClientRect();
     return {x: clientX - rect.left, y: clientY - rect.top};
   }
 
-  function downMouse(e){ drawing=true; last = mapPointFromClient(e.clientX, e.clientY); path=[last]; e.preventDefault(); }
-  function moveMouse(e){ if(!drawing) return; const p=mapPointFromClient(e.clientX, e.clientY); ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke(); last=p; path.push(p); e.preventDefault(); }
-  function upMouse(){ if(drawing && path && path.length>1) strokes.push(path); drawing=false; path=null; }
+  // Mouse handlers
+  canvas.addEventListener('mousedown', (e)=>{
+    if(!penEnabled) return;
+    drawing = true;
+    last = pointFromClient(e.clientX, e.clientY);
+    strokes.push([last]);
+    e.preventDefault();
+  });
+  canvas.addEventListener('mousemove', (e)=>{
+    if(!drawing || !penEnabled) return;
+    const p = pointFromClient(e.clientX, e.clientY);
+    const path = strokes[strokes.length-1];
+    ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke();
+    path.push(p); last = p; e.preventDefault();
+  });
+  window.addEventListener('mouseup', ()=>{ drawing=false; });
 
-  function downTouch(e){
-    if(e.touches.length!==1){ drawing=false; return; }
-    const t=e.touches[0]; drawing=true; last=mapPointFromClient(t.clientX,t.clientY); path=[last]; e.preventDefault();
-  }
-  function moveTouch(e){
-    if(!drawing || e.touches.length!==1) return;
-    const t=e.touches[0]; const p=mapPointFromClient(t.clientX,t.clientY);
-    ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke(); last=p; path.push(p); e.preventDefault();
-  }
-  function upTouch(){ if(drawing && path && path.length>1) strokes.push(path); drawing=false; path=null; }
+  // Touch handlers (single-finger draws; multi-finger = pinch-zoom)
+  canvas.addEventListener('touchstart', (e)=>{
+    if(!penEnabled || e.touches.length!==1) return; // allow pinch-zoom with 2 fingers
+    const t = e.touches[0];
+    drawing = true;
+    last = pointFromClient(t.clientX, t.clientY);
+    strokes.push([last]);
+    e.preventDefault(); // prevent scroll only when drawing
+  }, {passive:false});
+  canvas.addEventListener('touchmove', (e)=>{
+    if(!drawing || !penEnabled || e.touches.length!==1) return;
+    const t = e.touches[0];
+    const p = pointFromClient(t.clientX, t.clientY);
+    const path = strokes[strokes.length-1];
+    ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke();
+    path.push(p); last = p;
+    e.preventDefault();
+  }, {passive:false});
+  canvas.addEventListener('touchend', ()=>{ drawing=false; });
 
-  window.addEventListener('resize', sizeToMatch);
-  img.addEventListener('load', sizeToMatch);
-  if (img.complete) sizeToMatch();
+  // Resize handling
+  window.addEventListener('resize', resizeToMatch);
+  img.addEventListener('load', resizeToMatch);
+  if (img.complete) resizeToMatch();
+  const ro = new ResizeObserver(resizeToMatch);
+  ro.observe(frame);
 
-  canvas.addEventListener('mousedown', downMouse);
-  canvas.addEventListener('mousemove', moveMouse);
-  window.addEventListener('mouseup', upMouse);
-
-  canvas.addEventListener('touchstart', downTouch, {passive:false});
-  canvas.addEventListener('touchmove', moveTouch, {passive:false});
-  canvas.addEventListener('touchend', upTouch);
-
-  document.getElementById('clear').addEventListener('click',()=>{ if(!confirm('ลบลายเซ็นทั้งหมด?')) return; strokes.length=0; redraw(); });
+  // Toolbar actions
   document.getElementById('undo').addEventListener('click',()=>{ strokes.pop(); redraw(); });
-  document.getElementById('toggle').addEventListener('click',()=>{ canvas.classList.toggle('hidden-border'); });
-
-  document.getElementById('saveImg').addEventListener('click', async ()=>{
-    const win = window.open('about:blank'); // open synchronously to bypass popup blockers
-    if(!win){ alert('ระบบบล็อกการเปิดแท็บใหม่ กรุณาอนุญาต pop-up แล้วลองอีกครั้ง'); return; }
-
-    const wasHidden = canvas.classList.contains('hidden-border');
-    canvas.classList.add('hidden-border');
-    const out = await html2canvas(frame, {scale: 2, backgroundColor: null});
-    if(!wasHidden) canvas.classList.remove('hidden-border');
-    const dataUrl = out.toDataURL('image/png');
-
-    // Build simple page with image + anchored download link (fixed filename)
-    win.document.open();
-    win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>e-signature-ttk-ems</title></head>');
-    win.document.write('<body style="margin:0;display:flex;flex-direction:column;gap:8px;align-items:center;background:#111">');
-    win.document.write('<a id="dl" href="' + dataUrl + '" download="e-signature-ttk-ems.png" style="display:inline-block;margin:8px;padding:10px 14px;background:#fff;border-radius:10px;text-decoration:none;font-family:sans-serif">ดาวน์โหลดไฟล์: e-signature-ttk-ems.png</a>');
-    win.document.write('<img src="' + dataUrl + '" alt="signed" style="max-width:100%;height:auto;display:block;border:0;"/>');
-    win.document.write('</body></html>');
-    win.document.close();
+  document.getElementById('clear').addEventListener('click',()=>{ if(!confirm('ลบลายเส้นทั้งหมด?')) return; strokes.length=0; redraw(); });
+    const penBtn = document.getElementById('penToggle');
+  penBtn.addEventListener('click',()=>{ penEnabled = !penEnabled; penBtn.textContent = penEnabled ? 'ปากกา: เปิด' : 'ปากกา: ปิด'; canvas.style.cursor = penEnabled ? 'crosshair' : 'default'; });
+  canvas.style.cursor = 'crosshair';
+  // Fullscreen button
+  document.getElementById('fullscreen').addEventListener('click', ()=>{
+    const elem = document.getElementById('frame');
+    if (!document.fullscreenElement && elem.requestFullscreen) {
+      elem.requestFullscreen();
+    } else if (!document.fullscreenElement && elem.webkitRequestFullscreen) { // Safari
+      elem.webkitRequestFullscreen();
+    } else if (!document.fullscreenElement && elem.msRequestFullscreen) { // IE11
+      elem.msRequestFullscreen();
+    } else {
+      if (document.exitFullscreen) document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      else if (document.msExitFullscreen) document.msExitFullscreen();
+    }
   });
 })();
 </script>
