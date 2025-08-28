@@ -39,10 +39,14 @@
 /* Mobile: dock to bottom */
 @media (max-width: 720px){
   #fixedToolbar{
-    top:auto; bottom:10px; left:50%; transform:translateX(-50%);
-    flex-direction:row; gap:6px; padding:8px;
+    position: fixed;
+    bottom: 0; left: 0; right: 0; top: auto;
+    width: 100%; transform: none;
+    flex-direction: row; gap: 6px; padding: 8px;
+    border-radius: 0; border-left: none; border-right: none;
   }
-  #fixedToolbar .btn{ width:auto; }
+  #fixedToolbar .btn{ flex:1; min-width: 0; text-align:center; }
+  .wrap{ padding-left: 12px; padding-right: 12px; padding-bottom: 64px; }
 }
 /* Add left padding so content isn't hidden behind toolbar on wide screens */
 @media (min-width: 721px){
@@ -109,9 +113,9 @@ document.addEventListener('DOMContentLoaded', function(){
 
   // pen style
   function setPenStyle(){
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 0.5;
     ctx.lineCap = 'round';
-    ctx.strokeStyle = '#0f172a';
+    ctx.strokeStyle = 'navy';
   }
 
   function resizeToMatch(){
@@ -300,5 +304,16 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
+
+<!-- injected by assistant: force pen globalAlpha to 1.0 -->
+<script>
+(function(){
+  const origBeginPath = CanvasRenderingContext2D.prototype.beginPath;
+  CanvasRenderingContext2D.prototype.beginPath = function(){
+    try { this.globalAlpha = 1.0; this.lineWidth = 0.5; } catch(e) {}
+    return origBeginPath.apply(this, arguments);
+  };
+})();
+</script>
 </body>
 </html>
